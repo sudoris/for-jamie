@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 const express = require('express')
 const app = express()
 const bcrypt = require('bcrypt')
@@ -9,14 +11,14 @@ app.use(express.json())
 const users = []
 
 app.get('/', (req, res) => {
-  res.send('Hello')
+  return res.send('Hello')
 })
 
 app.post('/signup', async (req, res) => {  
   const user = { username: req.body.username, password: req.body.password }
 
   if (!user.username || !user.password) {
-    res.status(422).send()
+    return res.sendStatus(422)
   }
   
   try {
@@ -26,9 +28,9 @@ app.post('/signup', async (req, res) => {
 
     // create user
     users.push(user)
-    res.status(201).send()
+    return res.sendStatus(201)
   } catch {
-    res.status(500).send()
+    return res.sendStatus(500)
   } 
 })
 
@@ -36,24 +38,46 @@ app.post('/login', async (req, res) => {
   // check that user exists
   const user = users.find(user => user.username === req.body.username)
   if (!user) {
-    return res.status(400).send('login failed')
+    return res.sendStatus(422)
   }
 
+  // authenticate user
   try {
     if (await bcrypt.compare(req.body.password, user.password)) {
-      res.send('Sucess')
+      // create and send jsonwebtoken
+      const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET)
+      return res.send({ accessToken })
     } else {
-      res.send('login failed')
+      return res.sendStatus(403)
     }
   } catch {
-    res.status(500).send()
-  }
-
-  // create and send jsonwebtoken
+    return res.sendStatus(500)
+  }  
 })
 
 app.post('/logout', (req, res) => {
   // logout
 })
+
+
+app.get('/enrolled', authenticateToken, (req, res) => {
+  return res.send(['Math', 'Science', 'English'])
+})
+
+// middleware
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization']
+  // token comes after 'Bearer '
+  const token = authHeader && authHeader.split(' ')[1] 
+  if (!token) {
+    return res.sendStatus(401)
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403)
+    req.user = user
+    next()
+  })
+}
 
 app.listen(3333)
