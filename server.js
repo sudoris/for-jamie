@@ -9,6 +9,7 @@ const axios = require('axios')
 const jwt = require('jsonwebtoken')
 
 app.use(express.json())
+// allow * for dev
 app.use(cors())
 
 const users = []
@@ -17,9 +18,17 @@ app.get('/', (req, res) => {
   return res.send(users)
 })
 
+app.post('/test', (req, res) => {
+  return res.send('ok')
+})
+
 app.post('/signup', async (req, res) => {  
   if (!req.body.signupEmail || !req.body.signupPassword) {
     return res.sendStatus(422)
+  }
+
+  if (users.find(user => user.email === req.body.signupEmail)) {
+    return res.sendStatus(409)
   }
 
   const user = { 
@@ -41,40 +50,23 @@ app.post('/signup', async (req, res) => {
     // create user
     users.push(user)    
 
+    // log in automatically for user after successful signup
+    // note: must use unsalted password for log in
     const accessToken = await login({
       email: user.email,
       password: req.body.signupPassword
     })
 
-    console.log(accessToken)
-
-    return accessToken
-    // return res.sendStatus(201)
-  } catch (err){
-    console.log(err)
+    return res.send({ accessToken })
+  } catch (err) {
     return res.sendStatus(500)
   } 
 })
 
 app.post('/login', async (req, res) => { 
-  const accessToken = await login({ email: req.body.email, password: req.body.password })
-
-  console.log(accessToken)
-  // if ()
-  // authenticate user
-  // try {
-  //   if (await bcrypt.compare(req.body.password, user.password)) {
-  //     // create and send jsonwebtoken
-  //     const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h'})
-  //     return res.send({ accessToken })
-  //   } else {
-  //     return res.sendStatus(403)
-  //   }
-  // } catch {
-
-    
-  //   return res.sendStatus(500)
-  // }  
+  await login({ email: req.body.email, password: req.body.password })  
+    .then((accessToken) => res.send({ accessToken }))
+    .catch(err => res.sendStatus(400)) 
 })
 
 app.delete('/logout', (req, res) => {
@@ -95,9 +87,7 @@ function authenticateToken(req, res, next) {
   }
 
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      console.log(new Date().toISOString())
-      console.log(err)
+    if (err) {      
       return res.sendStatus(403)
     }
     req.user = user
@@ -109,7 +99,7 @@ function authenticateToken(req, res, next) {
 async function login({ email, password }) {
   const user = users.find(user => user.email === email )
   if (!user) {
-    return 'no user found'
+    throw new Error('user not found')
   }
 
   // authenticate user
@@ -117,12 +107,12 @@ async function login({ email, password }) {
     if (await bcrypt.compare(password, user.password)) {
       // create and send jsonwebtoken
       const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
-      return { accessToken }
+      return accessToken
     } else {
-      return "login invalid"
+      throw new Error('wrong password')
     }
-  } catch {
-    return "something bad has happened"
+  } catch (err) {
+    throw err
   }
 }
 
