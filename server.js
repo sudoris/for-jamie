@@ -1,16 +1,39 @@
 require('dotenv').config()
 
+const path = require('node:path');
 const express = require('express')
 const app = express()
+// const serveIndex = require('serve-index')
 const cors = require('cors')
 const bcrypt = require('bcrypt')
 const axios = require('axios')
+const readdir = require ('node:fs/promises').readdir;
+
+const multer  = require('multer')
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, './uploads')
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.originalname + '.' + uniqueSuffix)
+  }
+})
+
+const upload = multer({ storage: storage })
+// const upload = multer({ dest: 'uploads/' })
 
 const jwt = require('jsonwebtoken')
 
+// app.options('*', cors());
+app.use(cors())
 app.use(express.json())
 // allow * for dev
-app.use(cors())
+
+
+// app.use(express.static('uploads'))
+app.use('/uploads',express.static(path.join(__dirname, 'uploads')));
+// app.use('/uploads', serveIndex('uploads'))
 
 const users = []
 
@@ -76,6 +99,45 @@ app.delete('/logout', (req, res) => {
 app.get('/enrolled', authenticateToken, (req, res) => {
   return res.send(['Math', 'Science', 'English'])
 })
+
+// onedrive stuff
+app.post('/upload', upload.array('file', 5), (req, res) => {
+  console.log(req.files)
+  console.log(req.body)
+  return res.sendStatus(200)
+})
+
+app.get('/uploads-index', async (req, res) => {
+  try {
+    const files = await readdir('./uploads')
+    const filesDetails = files.map(fileName => {
+      const id = fileName.substr(fileName.lastIndexOf('.') + 1, fileName.length)
+      const nameWithType = fileName.substr(0, fileName.lastIndexOf('.'))
+      const name = nameWithType.substr(0, nameWithType.lastIndexOf('.'))
+      const fileType = nameWithType.substr(nameWithType.lastIndexOf('.') + 1, nameWithType.length)
+      
+      return {        
+        id: id,
+        name: name,
+        create_date: '', 
+        create_by: '', 
+        last_modified_date: '', 
+        last_modified_by: '', 
+        type: fileType
+      }      
+    })
+    
+    // return res.send(files.map(file => file.substr(0, file.lastIndexOf('.'))))
+    return res.send(filesDetails)
+  } catch (err) {
+    console.error(err);
+  }  
+  return res.sendStatus(200)
+})
+
+
+
+
 
 // middleware
 function authenticateToken(req, res, next) {
